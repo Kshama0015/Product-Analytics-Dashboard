@@ -1,31 +1,49 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
-from sqlalchemy import text
+from sqlalchemy import text, insert
 import bcrypt
 from config import engine
+from models import users as users_table
 
 auth_routes = Blueprint("auth_routes", __name__)
-
-users = []
 
 @auth_routes.route("/register", methods=["POST"])
 def register():
 
     data = request.json
+    username = data.get("username")
+    password = data.get("password")
+    age = data.get("age")
+    gender = data.get("gender")
 
-    hashed = bcrypt.hashpw(
-        data["password"].encode("utf-8"),
-        bcrypt.gensalt()
-    )
+    if not username or not password:
+        return {"error": "Username and password are required"}, 400
 
-    user = {
-        "username": data["username"],
-        "password": hashed
-    }
+    with engine.connect() as conn:
+        existing = conn.execute(
+            text("SELECT id FROM users WHERE username = :username"),
+            {"username": username}
+        ).fetchone()
 
-    users.append(user)
+        if existing:
+            return {"error": "Username already exists"}, 409
 
-    return {"message": "user created"}
+        hashed = bcrypt.hashpw(
+            password.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode("utf-8")
+
+        conn.execute(
+            insert(users_table).values(
+                username=username,
+                password=hashed,
+                age=age,
+                gender=gender
+            )
+        )
+        conn.commit()
+
+    return {"message": "User created successfully"}, 201
     
 
 @auth_routes.route("/login", methods=["POST"])
