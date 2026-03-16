@@ -1,3 +1,7 @@
+import os
+import threading
+import time
+import urllib.request
 from datetime import timedelta
 from flask import Flask
 from flask_cors import CORS
@@ -27,6 +31,19 @@ app.register_blueprint(analytics_routes)
 @app.route("/")
 def home():
     return {"message": "API running"}
+
+def keep_alive():
+    url = os.environ.get("RENDER_EXTERNAL_URL")
+    if not url:
+        return
+    while True:
+        time.sleep(840)  # 14 minutes
+        try:
+            urllib.request.urlopen(url)
+        except Exception:
+            pass
+
+threading.Thread(target=keep_alive, daemon=True).start()
 
 if __name__ == "__main__":
     app.run(debug=True, port=5001)
