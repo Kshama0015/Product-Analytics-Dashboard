@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token
+from sqlalchemy import text
 import bcrypt
+from config import engine
 
 auth_routes = Blueprint("auth_routes", __name__)
 
@@ -31,16 +33,42 @@ def login():
 
     data = request.json
 
-    for user in users:
-        if user["username"] == data["username"]:
+    print("Login request received:", data)
 
-            if bcrypt.checkpw(
-                data["password"].encode("utf-8"),
-                user["password"]
-            ):
+    query = text("""
+        SELECT username, password
+        FROM users
+        WHERE username = :username
+    """)
 
-                token = create_access_token(identity=user["username"])
+    with engine.connect() as conn:
 
-                return {"token": token}
+        result = conn.execute(query, {"username": data["username"]}).fetchone()
 
+        print("DB result:", result)
+
+        if result is None:
+            print("User not found")
+            return {"error": "invalid credentials"}, 401
+
+        stored_password = result[1]
+
+        print("Stored hash:", stored_password)
+
+        password_match = bcrypt.checkpw(
+            data["password"].encode("utf-8"),
+            stored_password.encode("utf-8")
+        )
+
+        print("Password match:", password_match)
+
+        if password_match:
+
+            token = create_access_token(identity=result[0])
+
+            print("Login successful")
+
+            return {"token": token}
+
+    print("Login failed")
     return {"error": "invalid credentials"}, 401
